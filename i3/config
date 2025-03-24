@@ -22,7 +22,6 @@ font pango:monospace 16
 # Start XDG autostart .desktop files using dex. See also
 # https://wiki.archlinux.org/index.php/XDG_Autostart
 exec --no-startup-id dex-autostart --autostart --environment i3
-
 # The combination of xss-lock, nm-applet and pactl is a popular choice, so
 # they are included here as an example. Modify as you see fit.
 
@@ -212,13 +211,13 @@ bindsym F1 exec --no-startup-id pactl set-sink-mute @DEFAULT_SINK@ toggle
 # Mute the microphone with F4
 bindsym F4 exec --no-startup-id pactl set-source-mute @DEFAULT_SOURCE@ toggle
 exec --no-startup-id i3-msg "workspace 3; exec --no-startup-id firefox || firefox"
-exec --no-startup-id feh --bg-scale  ~/Downloads/wallpaperflare.com_wallpaper.jpg
+exec --no-startup-id feh --bg-scale  ~/Downloads/wall.jpg
 exec --no-startup-id picom --no-docks
 exec --no-startup-id picom --config ~/.config/picom.conf
 for_window [class="zen"] move to workspace 1 
 for_window [class="Spotify"] move to workspace 5 
 for_window [class="org.mozilla.firefox"] move to workspace 3 
-for_window [class="Alacritty"] move to workspace 2 
+for_window [class="karthikanishjoseph@fedora:~"] move to workspace 2 
 for_window [class="Code"] move to workspace 4 
 bindsym $mod+w exec --no-startup-id  flatpak run app.zen_browser.zen
 bindsym $mod+s exec --no-startup-id  flatpak run com.spotify.Client
@@ -226,4 +225,4 @@ bindsym $mod+c exec --no-startup-id  code
 bindsym $mod+a exec --no-startup-id  firefox 
 set $picom_toggle killall -q picom || picom  -b
 bindsym $mod+p exec $picom_toggle
-
+bindsym $mod+x exec nautilus ~
