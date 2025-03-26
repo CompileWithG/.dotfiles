@@ -97,7 +97,7 @@ bindsym $mod+f exec --no-startup-id alacritty -e ~/open-in-nvim.sh
 # change container layout (stacked, tabbed, toggle split)
 #bindsym $mod+s layout stacking
 #bindsym $mod+w layout tabbed
-bindsym $mod+e layout toggle split
+#bindsym $mod+e layout toggle split
 
 # toggle tiling / floating
 bindsym $mod+Shift+space floating toggle
@@ -195,10 +195,10 @@ bar {
 exec --no-startup-id xinput set-prop 15 "libinput Tapping Enabled" 1 
 #key bindings for controlling brightness
 # Decrease brightness with F5
-bindsym F5 exec --no-startup-id brightnessctl set 3%- 
+bindsym F5 exec --no-startup-id brightnessctl set 2%- 
 
 # Increase brightness with F6
-bindsym F6 exec --no-startup-id brightnessctl set 3%+
+bindsym F6 exec --no-startup-id brightnessctl set 2%+
 # Volume Down with F2
 bindsym F2 exec --no-startup-id pactl set-sink-volume @DEFAULT_SINK@ -5%
 
@@ -226,3 +226,5 @@ bindsym $mod+a exec --no-startup-id  firefox
 set $picom_toggle killall -q picom || picom  -b
 bindsym $mod+p exec $picom_toggle
 bindsym $mod+x exec nautilus ~
+bindsym Print exec flameshot gui
+bindsym $mod+e exec i3lock
