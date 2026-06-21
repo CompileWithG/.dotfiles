@@ -1,0 +1,11 @@
+. "$HOME/.cargo/env"
+export GDK_SCALE=2
+export GDK_DPI_SCALE=1.5
+export GDK_SCALE=1
+
+export PATH="/home/karthikanishjoseph/.local/share/solana/install/active_release/bin:$PATH"
+
+# Added by LM Studio CLI (lms)
+export PATH="$PATH:/home/karthikanishjoseph/.lmstudio/bin"
+# End of LM Studio CLI section
+

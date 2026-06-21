@@ -1,0 +1,96 @@
+format = """
+[](fg:blue)\
+$os\
+$username\
+[](fg:blue bg:bright-black)\
+$directory\
+[](fg:bright-black bg:black)\
+$git_branch\
+$git_status\
+[](fg:black)\
+$nodejs\
+$python\
+$rust\
+$golang\
+$lua\
+$cmd_duration\
+$line_break\
+$character"""
+
+# Colors use ANSI names (blue/black/red/...) so the prompt adapts to the active Warp theme.
+
+[os]
+disabled = false
+style = "bg:blue fg:black"
+
+[os.symbols]
+Macos = " "
+Linux = " "
+Fedora = " "
+Arch = " "
+Ubuntu = " "
+Debian = " "
+Windows = " "
+
+[username]
+show_always = true
+style_user = "bg:blue fg:black"
+style_root = "bg:blue fg:black"
+format = '[ $user ]($style)'
+
+[directory]
+style = "bg:bright-black fg:white"
+format = "[ $path ]($style)"
+truncation_length = 3
+truncation_symbol = "…/"
+
+[directory.substitutions]
+"Documents" = "󰈙 "
+"Downloads" = " "
+"Music" = "󰝚 "
+"Pictures" = " "
+"Developer" = "󰲋 "
+
+[git_branch]
+symbol = ""
+style = "bg:black fg:cyan"
+format = '[ $symbol $branch ]($style)'
+
+[git_status]
+style = "bg:black fg:red"
+format = '[$all_status$ahead_behind ]($style)'
+
+[nodejs]
+symbol = ""
+style = "fg:green"
+format = '[ $symbol ($version) ]($style)'
+
+[python]
+symbol = ""
+style = "fg:yellow"
+format = '[ $symbol ($version) ]($style)'
+
+[rust]
+symbol = ""
+style = "fg:red"
+format = '[ $symbol ($version) ]($style)'
+
+[golang]
+symbol = ""
+style = "fg:cyan"
+format = '[ $symbol ($version) ]($style)'
+
+[lua]
+symbol = ""
+style = "fg:blue"
+format = '[ $symbol ($version) ]($style)'
+
+[cmd_duration]
+min_time = 2000
+style = "fg:bright-black"
+format = "[  $duration ]($style)"
+
+[character]
+success_symbol = "[❯](bold green)"
+error_symbol = "[❯](bold red)"
+vimcmd_symbol = "[❮](bold green)"

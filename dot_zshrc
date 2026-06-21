@@ -1,0 +1,128 @@
+# >>> dotfiles-portable (managed) >>>
+# This block is appended by install.sh — edit between the markers if you want
+# tweaks to survive a re-install. Lines outside the markers are left alone.
+
+# ── PATH ──────────────────────────────────────────────────────────────────
+export PATH="$HOME/.local/bin:$PATH"
+
+# ── editors ───────────────────────────────────────────────────────────────
+export EDITOR="${EDITOR:-vim}"
+export VISUAL="$EDITOR"
+
+# ── zsh history (bigger + shared across panes) ────────────────────────────
+HISTSIZE=50000
+SAVEHIST=50000
+HISTFILE=$HOME/.zsh_history
+setopt SHARE_HISTORY
+setopt HIST_IGNORE_DUPS
+setopt HIST_IGNORE_ALL_DUPS
+setopt HIST_IGNORE_SPACE
+setopt HIST_REDUCE_BLANKS
+setopt EXTENDED_HISTORY
+zmodload zsh/datetime 2>/dev/null
+
+# ── modern CLI aliases (no-op if tool not installed) ──────────────────────
+command -v eza >/dev/null && {
+  alias ls='eza --icons --group-directories-first'
+  alias ll='eza -lah --icons --git --group-directories-first'
+  alias lt='eza --tree -L 2 --icons --git-ignore'
+}
+command -v bat >/dev/null && alias cat='bat --paging=never'
+command -v lazygit >/dev/null && alias lg='lazygit'
+
+# ── starship prompt + fzf reverse-search ──────────────────────────────────
+command -v starship >/dev/null && eval "$(starship init zsh)"
+bindkey '^R' history-incremental-search-backward
+[[ -f /usr/share/fzf/shell/key-bindings.zsh ]] && source /usr/share/fzf/shell/key-bindings.zsh
+[[ -f /usr/share/fzf/key-bindings.zsh        ]] && source /usr/share/fzf/key-bindings.zsh
+
+# ── zoxide (smart cd; learns where you go) ────────────────────────────────
+command -v zoxide >/dev/null && eval "$(zoxide init zsh)"
+
+# ── direnv (auto-load .envrc per directory) ───────────────────────────────
+command -v direnv >/dev/null && eval "$(direnv hook zsh)"
+
+# ── long-command toast notifier (>30s commands send a dunst toast) ────────
+__cmd_ts=0
+__cmd_str=""
+preexec() { __cmd_ts=$EPOCHSECONDS; __cmd_str="$1"; }
+precmd() {
+  local rc=$?
+  [ -z "$__cmd_ts" ] && return
+  local elapsed=$(( EPOCHSECONDS - __cmd_ts ))
+  if [ "$elapsed" -ge 30 ] && [ -n "$__cmd_str" ]; then
+    local title="finished in ${elapsed}s"
+    [ "$rc" -ne 0 ] && title="failed (rc=$rc) after ${elapsed}s"
+    local body="${__cmd_str:0:120}"
+    command -v notify-send >/dev/null && notify-send -u "${rc:+normal}" "$title" "$body" 2>/dev/null
+  fi
+  __cmd_ts=0; __cmd_str=""
+}
+
+# proj — fzf project picker; jumps into selected repo (and opens in $EDITOR if -e).
+# Usage:  proj           pick and cd
+#         proj -e        pick, cd, and open in $EDITOR
+#         proj -t        pick, cd, attach (or create) a tmux session named after the repo
+proj() {
+  local root="${PROJ_ROOT:-$HOME/Developments}"
+  local pick
+  pick=$(find "$root" -maxdepth 4 -name .git -type d 2>/dev/null \
+         | sed 's|/.git$||' \
+         | sed "s|^$HOME/||" \
+         | fzf --prompt='proj > ' --height=40% --reverse --header="projects under $root") || return 0
+  [ -z "$pick" ] && return 0
+  local dir="$HOME/$pick"
+  cd "$dir" || return 1
+  local open_editor=0 use_tmux=0
+  for arg in "$@"; do
+    [ "$arg" = "-e" ] && open_editor=1
+    [ "$arg" = "-t" ] && use_tmux=1
+  done
+  if [ "$use_tmux" = 1 ] && command -v tmux >/dev/null; then
+    local sess="${pick##*/}"
+    if tmux has-session -t "$sess" 2>/dev/null; then
+      [ -n "${TMUX:-}" ] && tmux switch-client -t "$sess" || tmux attach -t "$sess"
+    else
+      tmux new-session -ds "$sess" -c "$dir"
+      [ -n "${TMUX:-}" ] && tmux switch-client -t "$sess" || tmux attach -t "$sess"
+    fi
+  fi
+  [ "$open_editor" = 1 ] && [ -n "${EDITOR:-}" ] && "$EDITOR" .
+  return 0
+}
+
+# ── AI shell: '#' prefix + Alt+/ widget + Alt+? explain ───────────────────
+# # something here    — translate natural language to a command, ask before running
+# Alt+/               — translate what you already typed into a command (review then Enter)
+# Alt+?               — explain the command currently in your buffer
+'#'() { ai-shell -- "$*"; }
+
+ai-translate-widget() {
+  local q="$BUFFER"
+  [ -z "$q" ] && { zle -M "type your intent first, then Alt+/"; return; }
+  zle -M "asking..."
+  local out
+  out=$(ai-shell --inline -- "$q" 2>/dev/null)
+  [ -z "$out" ] && { zle -M "no result"; return; }
+  BUFFER="$out"
+  CURSOR=${#BUFFER}
+  zle redisplay
+}
+zle -N ai-translate-widget
+bindkey '^[/' ai-translate-widget
+
+ai-explain-widget() {
+  local q="$BUFFER"
+  [ -z "$q" ] && { zle -M "no command in buffer"; return; }
+  zle -I
+  printf '\n'
+  ai-shell --explain -- "$q"
+  zle reset-prompt
+}
+zle -N ai-explain-widget
+bindkey '^[?' ai-explain-widget
+
+# Anthropic API key (still used by pulse, pair; ai-shell now uses the Claude
+# Code CLI directly). Drop the key in ~/.config/anthropic/env as:
+[ -f ~/.config/anthropic/env ] && source ~/.config/anthropic/env
+# <<< dotfiles-portable (managed) <<<

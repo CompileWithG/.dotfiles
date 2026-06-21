@@ -1,0 +1,206 @@
+#!/usr/bin/env python3
+"""Quick Notes — lightweight popup CRUD over StickyNotesCanvas notes.json.
+Status is encoded in the note color (native field the app preserves):
+  todo=yellow, in-progress=blue, done=green."""
+import json, os, tempfile
+import gi
+gi.require_version("Gtk", "4.0")
+gi.require_version("Adw", "1")
+from gi.repository import Gtk, Adw, Gio, GLib
+
+NJ = os.path.expanduser(
+    "~/.var/app/io.github.faridjaff.StickyNotesCanvas/config/sticky-notes-canvas/notes.json")
+
+STATES = [("Todo", "🟡", "yellow"), ("In progress", "🔵", "blue"), ("Done", "🟢", "green")]
+COLOR2IDX = {c: i for i, (_, _, c) in enumerate(STATES)}
+
+
+def load():
+    try:
+        return json.load(open(NJ))
+    except Exception:
+        return {"notes": [], "folders": {}, "links": [], "tweaks": {},
+                "cwd": "root", "view": {"x": 0, "y": 0, "z": 1},
+                "drawer": True, "folderOrder": []}
+
+
+def save(d):
+    os.makedirs(os.path.dirname(NJ), exist_ok=True)
+    fd, tmp = tempfile.mkstemp(dir=os.path.dirname(NJ), suffix=".tmp")
+    with os.fdopen(fd, "w") as f:
+        json.dump(d, f, indent=2, ensure_ascii=False)
+    os.replace(tmp, NJ)
+
+
+def status_idx(color):
+    return COLOR2IDX.get(color, 0)
+
+
+class Win(Adw.ApplicationWindow):
+    def __init__(self, app):
+        super().__init__(application=app, title="Quick Notes")
+        self.set_default_size(560, 660)
+        self.editing = None  # note dict being edited, or None for new
+
+        self.stack = Gtk.Stack(transition_type=Gtk.StackTransitionType.SLIDE_LEFT_RIGHT)
+        self.set_content(self.stack)
+        self.stack.add_named(self._list_page(), "list")
+        self.stack.add_named(self._edit_page(), "edit")
+        self.refresh()
+
+    # ---------- LIST PAGE ----------
+    def _list_page(self):
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        hb = Adw.HeaderBar()
+        title = Adw.WindowTitle(title="Quick Notes", subtitle="todo · in-progress · done")
+        hb.set_title_widget(title)
+        new_btn = Gtk.Button(icon_name="list-add-symbolic", tooltip_text="New note (Ctrl+N)")
+        new_btn.add_css_class("suggested-action")
+        new_btn.connect("clicked", lambda *_: self.open_edit(None))
+        hb.pack_start(new_btn)
+        box.append(hb)
+
+        self.listbox = Gtk.ListBox(selection_mode=Gtk.SelectionMode.NONE)
+        self.listbox.add_css_class("boxed-list")
+        self.listbox.set_margin_start(12); self.listbox.set_margin_end(12)
+        self.listbox.set_margin_top(12); self.listbox.set_margin_bottom(12)
+        sw = Gtk.ScrolledWindow(vexpand=True)
+        clamp = Adw.Clamp(maximum_size=640, child=self.listbox)
+        sw.set_child(clamp)
+        box.append(sw)
+        return box
+
+    def refresh(self):
+        self.data = load()
+        child = self.listbox.get_first_child()
+        while child:
+            self.listbox.remove(child)
+            child = self.listbox.get_first_child()
+        notes = self.data.get("notes", [])
+        if not notes:
+            self.listbox.append(Adw.ActionRow(title="No notes yet", subtitle="Tap + to add one"))
+        for n in notes:
+            self.listbox.append(self._row(n))
+
+    def _row(self, n):
+        row = Adw.ActionRow(title=GLib.markup_escape_text(n.get("title", "(untitled)")))
+        body = (n.get("body", "") or "").replace("\n", " ").strip()
+        if body:
+            row.set_subtitle(GLib.markup_escape_text(body[:90]))
+        # status button (cycles)
+        si = status_idx(n.get("color", "yellow"))
+        st = Gtk.Button(label=f"{STATES[si][1]} {STATES[si][0]}", valign=Gtk.Align.CENTER)
+        st.add_css_class("flat")
+        st.connect("clicked", lambda *_: self.cycle_status(n))
+        row.add_prefix(st)
+        # edit + delete
+        ed = Gtk.Button(icon_name="document-edit-symbolic", valign=Gtk.Align.CENTER)
+        ed.add_css_class("flat")
+        ed.connect("clicked", lambda *_: self.open_edit(n))
+        row.add_suffix(ed)
+        de = Gtk.Button(icon_name="user-trash-symbolic", valign=Gtk.Align.CENTER)
+        de.add_css_class("flat")
+        de.connect("clicked", lambda *_: self.delete_note(n))
+        row.add_suffix(de)
+        return row
+
+    def cycle_status(self, n):
+        d = load()
+        for x in d["notes"]:
+            if x["id"] == n["id"]:
+                x["color"] = STATES[(status_idx(x.get("color", "yellow")) + 1) % 3][2]
+        save(d)
+        self.refresh()
+
+    def delete_note(self, n):
+        dlg = Adw.AlertDialog(heading="Delete note?",
+                              body=n.get("title", "(untitled)"))
+        dlg.add_response("cancel", "Cancel")
+        dlg.add_response("del", "Delete")
+        dlg.set_response_appearance("del", Adw.ResponseAppearance.DESTRUCTIVE)
+        def resp(_d, r):
+            if r == "del":
+                d = load()
+                d["notes"] = [x for x in d["notes"] if x["id"] != n["id"]]
+                save(d); self.refresh()
+        dlg.connect("response", resp)
+        dlg.present(self)
+
+    # ---------- EDIT PAGE ----------
+    def _edit_page(self):
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        hb = Adw.HeaderBar(show_end_title_buttons=False, show_start_title_buttons=False)
+        self.edit_title_widget = Adw.WindowTitle(title="New note")
+        hb.set_title_widget(self.edit_title_widget)
+        cancel = Gtk.Button(label="Cancel")
+        cancel.connect("clicked", lambda *_: self.stack.set_visible_child_name("list"))
+        hb.pack_start(cancel)
+        savb = Gtk.Button(label="Save"); savb.add_css_class("suggested-action")
+        savb.connect("clicked", lambda *_: self.do_save())
+        hb.pack_end(savb)
+        box.append(hb)
+
+        inner = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12,
+                        margin_top=18, margin_bottom=18, margin_start=18, margin_end=18)
+        self.title_entry = Gtk.Entry(placeholder_text="Title / objective")
+        inner.append(self.title_entry)
+        self.body_view = Gtk.TextView(wrap_mode=Gtk.WrapMode.WORD, top_margin=8,
+                                      bottom_margin=8, left_margin=8, right_margin=8)
+        bsw = Gtk.ScrolledWindow(vexpand=True, child=self.body_view)
+        bsw.add_css_class("card")
+        inner.append(bsw)
+        # status selector
+        self.status_drop = Gtk.DropDown.new_from_strings([s[0] for s in STATES])
+        sr = Adw.ActionRow(title="Status")
+        sr.add_suffix(self.status_drop); sr.set_activatable_widget(self.status_drop)
+        grp = Gtk.ListBox(selection_mode=Gtk.SelectionMode.NONE); grp.add_css_class("boxed-list")
+        grp.append(sr); inner.append(grp)
+        box.append(inner)
+        return box
+
+    def open_edit(self, n):
+        self.editing = n
+        self.edit_title_widget.set_title("Edit note" if n else "New note")
+        self.title_entry.set_text(n.get("title", "") if n else "")
+        self.body_view.get_buffer().set_text(n.get("body", "") if n else "")
+        self.status_drop.set_selected(status_idx(n.get("color", "yellow")) if n else 0)
+        self.stack.set_visible_child_name("edit")
+        self.title_entry.grab_focus()
+
+    def do_save(self):
+        title = self.title_entry.get_text().strip()
+        buf = self.body_view.get_buffer()
+        body = buf.get_text(buf.get_start_iter(), buf.get_end_iter(), True).strip()
+        if not title and not body:
+            self.stack.set_visible_child_name("list"); return
+        color = STATES[self.status_drop.get_selected()][2]
+        d = load()
+        if self.editing:
+            for x in d["notes"]:
+                if x["id"] == self.editing["id"]:
+                    x["title"], x["body"], x["color"] = (title or "(untitled)"), body, color
+        else:
+            nums = [int(x["id"][1:]) for x in d["notes"] if x["id"][1:].isdigit()]
+            nid = "n" + str((max(nums) if nums else 0) + 1)
+            k = len(d["notes"])
+            d["notes"].append({"id": nid, "folder": "workflow",
+                               "title": title or "(untitled)", "body": body, "color": color,
+                               "x": 100 + (k % 6) * 34, "y": 100 + (k % 6) * 34,
+                               "w": 280, "h": 200, "pinned": False})
+        save(d)
+        self.stack.set_visible_child_name("list")
+        self.refresh()
+
+
+class App(Adw.Application):
+    def __init__(self):
+        super().__init__(application_id="io.local.QuickNotes",
+                         flags=Gio.ApplicationFlags.FLAGS_NONE)
+
+    def do_activate(self):
+        w = self.props.active_window or Win(self)
+        w.present()
+
+
+if __name__ == "__main__":
+    App().run(None)
